@@ -22,7 +22,6 @@ protected:
 	void CreateChannelUpdate();
 
 	double mChannelRadians;
-	const int mChannels = 4;
 	SimulationChannelDescriptor mSerialSimulationData;
 
 };
