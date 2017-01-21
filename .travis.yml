@@ -1,0 +1,12 @@
+sudo: false
+os:
+  - linux
+  - osx
+
+install:
+  - git clone https://github.com/saleae/AnalyzerSDK.git sdk
+  - ln -s sdk/include include
+  - ln -s sdk/lib lib
+
+script:
+  python build_analyzer.py
