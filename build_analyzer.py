@@ -1,124 +1,160 @@
 #!/usr/bin/env python2
 
-import os, glob, platform
+from __future__ import print_function
+import glob
+import os
+import platform
+import subprocess
+import sys
+import time
+
+cxx = os.environ.get('CXX')
+if not cxx:
+    cxx = "g++"
+ld = cxx
 
 #find out if we're running on mac or linux and set the dynamic library extension
 dylib_ext = ""
 if platform.system().lower() == "darwin":
-    dylib_ext = ".dylib"
+    target = "macOS"
+    dylib_ext = "dylib"
+elif platform.system().lower() == "linux":
+    if "mingw" in cxx:
+        target = "Windows"
+        dylib_ext = "dll"
+    else:
+        target = "Linux"
+        dylib_ext = "so"
 else:
-    dylib_ext = ".so"
+    print("Unsupported build environment", file=sys.stderr)
+    sys.exit(1)
     
 print("Running on " + platform.system())
+print("Building for: {}".format(target))
 
 #make sure the release folder exists, and clean out any .o/.so file if there are any
-if not os.path.exists( "release" ):
-    os.makedirs( "release" )
+if not os.path.exists("release"):
+    os.makedirs("release")
 
-os.chdir( "release" )
-o_files = glob.glob( "*.o" )
-o_files.extend( glob.glob( "*" + dylib_ext ) )
+os.chdir("release")
+o_files = glob.glob("*.o")
+o_files.extend(glob.glob("*." + dylib_ext))
 for o_file in o_files:
-    os.remove( o_file )
-os.chdir( ".." )
+    os.remove(o_file)
+os.chdir("..")
 
 
 #make sure the debug folder exists, and clean out any .o/.so files if there are any
-if not os.path.exists( "debug" ):
-    os.makedirs( "debug" )
+if not os.path.exists("debug"):
+    os.makedirs("debug")
 
-os.chdir( "debug" )
-o_files = glob.glob( "*.o" );
-o_files.extend( glob.glob( "*" + dylib_ext ) )
+os.chdir("debug")
+o_files = glob.glob("*.o");
+o_files.extend(glob.glob("*." + dylib_ext))
 for o_file in o_files:
-    os.remove( o_file )
-os.chdir( ".." )
+    os.remove(o_file)
+os.chdir("..")
 
 #find all the cpp files in /source.  We'll compile all of them
-os.chdir( "source" )
-cpp_files = glob.glob( "*.cpp" );
-os.chdir( ".." )
+os.chdir("source")
+cpp_files = glob.glob("*.cpp");
+os.chdir("..")
 
 #specify the search paths/dependencies/options for gcc
-include_paths = [ "include" ]
-link_paths = [ "lib" ]
-if platform.machine().endswith('64') and not platform.system().lower() == "darwin":
-    link_dependencies = [ "-lAnalyzer64" ] #refers to libAnalyzer.dylib or libAnalyzer.so
-else:
-    link_dependencies = [ "-lAnalyzer" ] #refers to libAnalyzer.dylib or libAnalyzer.so
+include_paths = ["include"]
+link_paths = ["lib"]
 
-debug_compile_flags = "-O0 -w -c -fpic -g"
-release_compile_flags = "-O3 -w -c -fpic"
+# bit hacky but works for GCC and Clang
+target64 = False
+for line in subprocess.check_output([cxx, '-v'], stderr=subprocess.STDOUT).splitlines():
+    if line.startswith('Target: '):
+        target64 = '64' in line
+
+if target64 and not platform.system().lower() == "darwin":
+    link_dependencies = ["Analyzer64"] #refers to libAnalyzer.dylib or libAnalyzer.so
+else:
+    link_dependencies = ["Analyzer"] #refers to libAnalyzer.dylib or libAnalyzer.so
+
+
+debug_compile_flags = ['-O0', '-g']
+release_compile_flags = ['-O3']
+
+cxxflags = ['-I{}'.format(p) for p in include_paths]
+cxxflags.extend(['-w', '-c', '-fpic'])
+
+ldflags = ['-L{}'.format(p) for p in link_paths]
+ldflags.extend(['-l{}'.format(l) for l in link_dependencies])
+
+if dylib_ext == "dylib":
+    ldflags.append("-dynamiclib")
+else:
+    ldflags.append("-shared")
+
+def call_shell(cmd):
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    while True:
+        time.sleep(0.1)
+        ret = p.poll()
+        print(p.stdout.read(), end='')
+        print(p.stderr.read(), file=sys.stderr, end='')
+        if ret != None:
+            break
+    return ret
+
+def compile(cpp_file, obj_file, flags=[]):
+    cmd = [cxx]
+    cmd.extend(cxxflags)
+    cmd.extend(flags)
+    cmd.extend(['-o', obj_file])
+    cmd.append(cpp_file)
+    print(" ".join(cmd))
+    return call_shell(cmd) == 0
+
+def link(objs, out_file, flags=[]):
+    cmd = [ld]
+    cmd.extend(ldflags)
+    cmd.extend(flags)
+    cmd.extend(['-o', out_file])
+    cmd.extend(objs)
+    print(" ".join(cmd))
+    return call_shell(cmd) == 0
+
+result = 0
+
+release_objs = []
+debug_objs = []
 
 #loop through all the cpp files, build up the gcc command line, and attempt to compile each cpp file
 for cpp_file in cpp_files:
+    obj = os.path.join('release', cpp_file.replace( ".cpp", ".o" ))
+    release_objs.append(obj)
+    if not compile(os.path.join('source', cpp_file), obj, release_compile_flags):
+        result = 1
+    obj = os.path.join('debug', cpp_file.replace( ".cpp", ".o" ))
+    debug_objs.append(obj)
+    if not compile(os.path.join('source', cpp_file), obj, debug_compile_flags):
+        result = 1
 
-    #g++
-    command = "g++ "
+if result == 0:
 
-    #include paths
-    for path in include_paths: 
-        command += "-I\"" + path + "\" "
+    #figgure out what the name of this analyzer is
+    analyzer_name = ""
+    for cpp_file in cpp_files:
+        if cpp_file.endswith("Analyzer.cpp"):
+            analyzer_name = cpp_file.replace("Analyzer.cpp", "")
+            break
 
-    release_command = command
-    release_command  += release_compile_flags
-    release_command += " -o\"release/" + cpp_file.replace( ".cpp", ".o" ) + "\" " #the output file
-    release_command += "\"" + "source/" + cpp_file + "\"" #the cpp file to compile
+    lib_file = 'lib{}Analyzer.{}'.format(analyzer_name, dylib_ext)
 
-    debug_command = command
-    debug_command  += debug_compile_flags
-    debug_command += " -o\"debug/" + cpp_file.replace( ".cpp", ".o" ) + "\" " #the output file
-    debug_command += "\"" + "source/" + cpp_file + "\"" #the cpp file to compile
+    if not link(release_objs, os.path.join('release', lib_file)):
+        result = 1
+    if not link(debug_objs, os.path.join('debug', lib_file)):
+        result = 1
 
-    #run the commands from the command line
-    print(release_command)
-    os.system( release_command )
-    print(debug_command)
-    os.system( debug_command )
-    
-#lastly, link
-#g++
-command = "g++ "
-
-#add the library search paths
-for link_path in link_paths:
-    command += "-L\"" + link_path + "\" "
-
-#add libraries to link against
-for link_dependency in link_dependencies:
-    command += link_dependency + " "
-
-#make a dynamic (shared) library (.so/.dylib)
-
-if dylib_ext == ".dylib":
-    command += "-dynamiclib "
-else:
-    command += "-shared "
-
-#figgure out what the name of this analyzer is
-analyzer_name = ""
-for cpp_file in cpp_files:
-    if cpp_file.endswith( "Analyzer.cpp" ):
-        analyzer_name = cpp_file.replace( "Analyzer.cpp", "" )
-        break
-
-#the files to create (.so/.dylib files)
-if dylib_ext == ".dylib":
-    release_command = command + "-o release/lib" + analyzer_name + "Analyzer.dylib "
-    debug_command = command + "-o debug/lib" + analyzer_name + "Analyzer.dylib "
-else:
-    release_command = command + "-o\"release/lib" + analyzer_name + "Analyzer.so\" "
-    debug_command = command + "-o\"debug/lib" + analyzer_name + "Analyzer.so\" "
-
-#add all the object files to link
-for cpp_file in cpp_files:
-    release_command += "release/" + cpp_file.replace( ".cpp", ".o" ) + " "
-    debug_command += "debug/" + cpp_file.replace( ".cpp", ".o" ) + " "
-    
-#run the commands from the command line
-print(release_command)
-os.system( release_command )
-print(debug_command)
-os.system( debug_command )
-
-        
+if result != 0:
+    print('')
+    print('************************************************')
+    print('Errors were generated during build!!!')
+    print('************************************************')
+    print('')
+sys.exit(result)
