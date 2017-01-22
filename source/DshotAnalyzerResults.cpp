@@ -19,19 +19,22 @@ DshotAnalyzerResults::~DshotAnalyzerResults()
 void DshotAnalyzerResults::GenerateBubbleText( U64 frame_index, Channel& channel, DisplayBase display_base )
 {
 	ClearResultStrings();
-	Frame frame = GetFrame( frame_index );
+	Frame frame = GetFrame(frame_index);
 
 	char number_str[128];
 	AnalyzerHelpers::GetNumberString(frame.mData1, display_base, 11, number_str, 128);
+	const char *telem_str = frame.mFlags & 1 ? " (telem req.)" : "";
+	const char *error_str = frame.mFlags & DISPLAY_AS_ERROR_FLAG ? "!" : "";
 
-	if (!frame.mFlags)
+	// widest display
+	AddResultString(error_str, number_str, telem_str);
+	// middle
+	AddResultString(error_str, number_str);
+	// shortest
+	if (frame.mFlags & DISPLAY_AS_ERROR_FLAG)
+		AddResultString(error_str);
+	else
 		AddResultString(number_str);
-	else if (frame.mFlags & DISPLAY_AS_ERROR_FLAG && frame.mFlags & 1)
-		AddResultString("!", number_str, " (telem. req.)");
-	else if (frame.mFlags & DISPLAY_AS_ERROR_FLAG)
-		AddResultString("!", number_str);
-	else if (frame.mFlags & 1)
-		AddResultString(number_str, " (telem. req.)");
 }
 
 void DshotAnalyzerResults::GenerateExportFile( const char* file, DisplayBase display_base, U32 export_type_user_id )

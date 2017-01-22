@@ -1,8 +1,10 @@
 #include "DshotAnalyzer.h"
 #include "DshotAnalyzerSettings.h"
 #include <AnalyzerChannelData.h>
+#include <AnalyzerHelpers.h>
 
 #include <stdint.h>
+#include <cstdio>
 
 DshotAnalyzer::DshotAnalyzer()
 :	Analyzer(),  
@@ -17,6 +19,11 @@ DshotAnalyzer::~DshotAnalyzer()
 	KillThread();
 }
 
+double DshotAnalyzer::proportionOfBit(U32 width)
+{
+	return static_cast<double>(width) / mSamplesPerBit;
+}
+
 void DshotAnalyzer::WorkerThread()
 {
 	mResults.reset( new DshotAnalyzerResults( this, mSettings.get() ) );
@@ -26,19 +33,18 @@ void DshotAnalyzer::WorkerThread()
 	mSampleRateHz = GetSampleRate();
 
 	mSerial = GetAnalyzerChannelData( mSettings->mInputChannel );
+	mSamplesPerBit = mSampleRateHz / (mSettings->mDshotRate * 1000);
 
 	if( mSerial->GetBitState() == BIT_HIGH )
 		mSerial->AdvanceToNextEdge();
 
-	U32 samples_per_bit = mSampleRateHz / (mSettings->mDshotRate * 1000);
-
-	uint64_t width = 0;
+	uint32_t width = 0;
 
 	for (;;) {
 		uint16_t data = 0;
 		uint64_t starting_sample = 0;
-
-		for (int i = sizeof(data) * 8 - 1; i >= 0; i--) {
+		int i;
+		for (i = sizeof(data) * 8 - 1; i >= 0; i--) {
 			mSerial->AdvanceToNextEdge(); //rising edge of first bit
 			uint64_t rising_sample = mSerial->GetSampleNumber();
 			if (!starting_sample)
@@ -47,14 +53,19 @@ void DshotAnalyzer::WorkerThread()
 			uint64_t falling_sample = mSerial->GetSampleNumber();
 
 			width = falling_sample - rising_sample;
-
-			bool set = (static_cast<double>(width) / samples_per_bit) > 0.5;
+			bool set = proportionOfBit(width) > 0.5;
+			// check if low pulse is too long / next bit is too far away
+			bool error = i > 0 && proportionOfBit(mSerial->GetSampleOfNextEdge() - falling_sample) > 1.5;
+			// check if high pulse is too short
+			error |= proportionOfBit(width) < 0.2;
 
 			if (set)
 				data |= 1 << i;
 
 			AnalyzerResults::MarkerType marker;
-			if (i == 4) { // telem request
+			if (error) {
+				marker = AnalyzerResults::ErrorX;
+			} else if (i == 4) { // telem request
 				if (set)
 					marker = AnalyzerResults::Start;
 				else
@@ -66,6 +77,14 @@ void DshotAnalyzer::WorkerThread()
 					marker = AnalyzerResults::Zero;
 			}
 			mResults->AddMarker(rising_sample + width / 2, marker, mSettings->mInputChannel);
+
+			if (error)
+				break;
+		}
+
+		if (i >= 0) { // message ended early / bit was errored
+			mResults->CommitResults();
+			continue;
 		}
 
 		uint16_t chan = data & 0xffe0;
@@ -75,7 +94,7 @@ void DshotAnalyzer::WorkerThread()
 		bool crcok = (data & 0xf) == crc;
 		chan >>= 5;
 
-		mSerial->Advance(samples_per_bit - width); // end of low pulse
+		mSerial->Advance(mSamplesPerBit - width); // end of low pulse
 
 		if (!crcok)
 			mResults->AddMarker(mSerial->GetSampleNumber(), AnalyzerResults::ErrorX, mSettings->mInputChannel);

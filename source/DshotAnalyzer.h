@@ -29,8 +29,11 @@ protected: //vars
 
 	//Serial analysis vars:
 	U32 mSampleRateHz;
+	U32 mSamplesPerBit;
 	U32 mStartOfStopBitOffset;
 	U32 mEndOfStopBitOffset;
+
+	double proportionOfBit(U32 width);
 };
 
 extern "C" ANALYZER_EXPORT const char* __cdecl GetAnalyzerName();
