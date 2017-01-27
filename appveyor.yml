@@ -19,14 +19,13 @@ after_build:
   - ps: tree /F deploy
 
 artifacts:
-  - path: deploy/logic-dshot-*.zip
+  - path: 'deploy/logic-dshot-*.zip'
 
 deploy:
   provider: GitHub
   description: 'Automatic build'
   auth_token:
     secure: KLuY5bPgxI9oDFmmhNWEwpPWN/9cXEWtBHt6J5OQzCfA27FHravJLDFdSAfsbsJw
-  artifact: deploy\*.zip
   draft: true
   prerelease: false
   force_update: true
