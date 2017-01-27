@@ -26,7 +26,7 @@ deploy:
   description: 'Automatic build'
   auth_token:
     secure: KLuY5bPgxI9oDFmmhNWEwpPWN/9cXEWtBHt6J5OQzCfA27FHravJLDFdSAfsbsJw
-  artifact: deploy/logic-dshot-*.zip
+  artifact: deploy\*.zip
   draft: true
   prerelease: false
   force_update: true
