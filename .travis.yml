@@ -1,23 +1,29 @@
-sudo: false
-dist: trusty
-os:
-- linux
-- osx
 language: cpp
-install:
-- git clone https://github.com/saleae/AnalyzerSDK.git sdk
-- ln -s sdk/include include
-- ln -s sdk/lib lib
+dist: trusty
+sudo: required
+
+install: "./scripts/travis-install-${TRAVIS_OS_NAME}.sh"
+
+before_script:
+- qbs setup-toolchains --detect
+- qbs config defaultProfile ${QBS_PROFILE}
+
+matrix:
+  include:
+  - os: linux
+    env: QBS_PROFILE=gcc PATH=/opt/qt58/bin:$PATH
+  - os: osx
+    env: QBS_PROFILE=clang
+
 script:
-- python build_analyzer.py
-after_success:
-- mkdir deploy && cd release && rm -f *.o && tar cfvJ "../deploy/logic-dshot-${TRAVIS_OS_NAME}-${TRAVIS_TAG}.tar.xz" * && cd ..
-- ls deploy
+- qbs install --install-root deploy -p package release
+- tree -h ./deploy
+
 deploy:
   provider: releases
   api_key:
     secure: OmB8N1pK1f2ASqfxPa33J+d9mZ3MjThnjRCVOVx4DLrtMyDaBXrS7VlnG1YHBk5EDZdOBDCcUD9DbuzyO5Pmj6H7reWNybb904Tic2izLBDOm7jaketwqDEhKhva3ivwas7SdJtgJW547GsFbP59EJVfCSQdxe/94i/FnF9CFk+rugp4Y+6EOR2TR5d8vHU5c3GGZWqxl/ypiS+NEc9NuQ+n3SnSm7NignfGGFYEb9JnLsqPeqzPVZ0IMBP9EHLIFtnFTdH3ou4om/pzm0EVvEdK5PtFaVwxUHC+vcpl8g2HKOI2+joWjilv3nkSIoPSOnvQoK8EzuewOfSapf/oOn+JW5HES06hT4O6cusJS2Z+DE7lzQA0Aap7fbCI8d9TfjIvknoTy8r8oWIMPA768UAhn2PqdvYqXPEJotomgTtQUtlFpNOuEdspzHxN5UEGc8ylRjcLeaPElcD04xTla87nJyk7fJyHRHbxoHpy4j3VFMaXXpRFVe+ttQRGVrlsAau9zaKJAe0KilsrsF9DAZQbngef13O91NQSkJ12mMepzhB193KYoJuQbAIggf7gm1uiUvAIwH9LBPThc2hkElck0Et12Tt23mw1rVAhI+2dBgkLB6ZLGVXwt0l5rq19ipUH7/u6n7SyEVSV+i0op8L7zBI54G0ich+8r2YjP3M=
-  file: deploy/logic-dshot-${TRAVIS_OS_NAME}-${TRAVIS_TAG}.tar.xz
+  file: deploy/logic-dshot-*.tar.xz
   skip_cleanup: true
   on:
     repo: tracernz/logic-dshot
