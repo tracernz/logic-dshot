@@ -15,13 +15,12 @@ public:
 	virtual void LoadSettings( const char* settings );
 	virtual const char* SaveSettings();
 
-	
 	Channel mInputChannel;
 	U32 mDshotRate;
 
 protected:
-	std::auto_ptr< AnalyzerSettingInterfaceChannel >	mInputChannelInterface;
-	std::auto_ptr< AnalyzerSettingInterfaceNumberList >	mDshotRateInterface;
+	std::unique_ptr< AnalyzerSettingInterfaceChannel >	mInputChannelInterface;
+	std::unique_ptr< AnalyzerSettingInterfaceNumberList >	mDshotRateInterface;
 };
 
 #endif //DSHOT_ANALYZER_SETTINGS

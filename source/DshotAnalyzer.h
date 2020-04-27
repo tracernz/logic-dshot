@@ -20,8 +20,8 @@ public:
 	virtual bool NeedsRerun();
 
 protected: //vars
-	std::auto_ptr< DshotAnalyzerSettings > mSettings;
-	std::auto_ptr< DshotAnalyzerResults > mResults;
+	std::unique_ptr< DshotAnalyzerSettings > mSettings;
+	std::unique_ptr< DshotAnalyzerResults > mResults;
 	AnalyzerChannelData* mSerial;
 
 	DshotSimulationDataGenerator mSimulationDataGenerator;
