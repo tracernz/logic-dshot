@@ -65,7 +65,7 @@ deploy:
   provider: GitHub
   description: 'Automatic build'
   auth_token:
-    secure: KLuY5bPgxI9oDFmmhNWEwpPWN/9cXEWtBHt6J5OQzCfA27FHravJLDFdSAfsbsJw
+    secure: 3TUmiiZ1SUAb9WChqNzfe58XztZeD/iUposBU5MEfJNdI/sp8kbDJK916gYZW032
   draft: true
   prerelease: false
   force_update: true
