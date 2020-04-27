@@ -1,25 +1,61 @@
-image: Visual Studio 2015
-shallow_clone: true
-clone_depth: 1
-
+# we use a custom clone script because appveyor doesn't fetch submodules
 clone_script:
-- cmd: git clone -q --branch=%APPVEYOR_REPO_BRANCH% --depth 1 --recursive https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
-- cmd: cd %APPVEYOR_BUILD_FOLDER%
-- cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
+  # for windows
+  - cmd: git clone -q --branch=%APPVEYOR_REPO_BRANCH% --depth 1 --recursive https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
+  - cmd: cd %APPVEYOR_BUILD_FOLDER%
+  - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
+  # for linux/macos
+  - sh: git clone -q --branch=${APPVEYOR_REPO_BRANCH} --depth 1 --recursive https://github.com/${APPVEYOR_REPO_NAME}.git ${APPVEYOR_BUILD_FOLDER}
+  - sh: cd ${APPVEYOR_BUILD_FOLDER}
+  - sh: git checkout -qf ${APPVEYOR_REPO_COMMIT}
+  # get the current version
+  - ps: if($env:APPVEYOR_REPO_TAG -eq "true") {$env:GIT_REV = $env:APPVEYOR_REPO_TAG_NAME} else {$env:GIT_REV = $env:APPVEYOR_REPO_COMMIT}
+
+environment:
+  matrix:
+    - arch: x86
+      compiler: msvc2019
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+    - arch: x64
+      compiler: msvc2019
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+    - arch: x64
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+    - arch: x64
+      APPVEYOR_BUILD_WORKER_IMAGE: macOS
+
+platform:
+  - x64
 
 install:
-  - cinst qbs
-  - qbs setup-toolchains --detect
+  # Set paths to dependencies (based on architecture)
+  - cmd: if %arch%==x86 (set PYTHON_ROOT=C:\python37) else (set PYTHON_ROOT=C:\python37-x64)
+  # Print out dependency paths
+  - cmd: echo Using Python at %PYTHON_ROOT%
+  # Add necessary paths to PATH variable
+  - cmd: set PATH=%cd%;%PYTHON_ROOT%;%PYTHON_ROOT%\Scripts;%PATH%
+  - sh: export PATH=~/venv3.8.1/bin:$PATH
+  # Install meson and ninja
+  - pip install ninja meson
+  # Set up the build environment
+  - cmd: if %compiler%==msvc2015 ( call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" %arch% )
+  - cmd: if %compiler%==msvc2017 ( call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" %arch% )
 
 build_script:
-  - qbs install --install-root deploy -p package profile:MSVC2015-x86 release
-  - qbs install --install-root deploy -p package profile:MSVC2015-amd64 release
+  - cmd: echo Building on %arch% with %compiler%
+  - sh: echo Building on $arch with $compiler
+  - meson --backend=ninja builddir
+  - ninja -C builddir
+  # zip up the binaries
+  - cmd: pushd builddir & 7z a -tzip "logic-dshot-%GIT_REV%.zip" "*.dll" && popd & exit 0
+  - sh: pushd builddir; tar -cvJf logic-dshot-${GIT_REV}.tar.xz $(ls *.so *.dylib 2>/dev/null); popd
 
 after_build:
-  - ps: tree /F deploy
+  - ps: ls builddir
 
 artifacts:
-  - path: 'deploy/logic-dshot-*.zip'
+  - path: 'builddir/logic-dshot-*.zip'
+  - path: 'builddir/logic-dshot-*.tar.xz'
 
 deploy:
   provider: GitHub
@@ -31,3 +67,4 @@ deploy:
   force_update: true
   on:
     appveyor_repo_tag: true
+
