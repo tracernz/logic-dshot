@@ -16,13 +16,17 @@ environment:
     - arch: x86
       compiler: msvc2019
       APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      REL_PLATFORM: win-x86
     - arch: x64
       compiler: msvc2019
       APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      REL_PLATFORM: win-x86_64
     - arch: x64
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      REL_PLATFORM: linux-x86_64
     - arch: x64
       APPVEYOR_BUILD_WORKER_IMAGE: macOS
+      REL_PLATFORM: macos-x86_64
 
 platform:
   - x64
@@ -47,8 +51,8 @@ build_script:
   - meson --backend=ninja builddir
   - ninja -C builddir
   # zip up the binaries
-  - cmd: pushd builddir & 7z a -tzip "logic-dshot-%GIT_REV%.zip" "*.dll" && popd & exit 0
-  - sh: pushd builddir; tar -cvJf logic-dshot-${GIT_REV}.tar.xz $(ls *.so *.dylib 2>/dev/null); popd
+  - cmd: pushd builddir & 7z a -tzip "logic-dshot-%REL_PLATFORM%-%GIT_REV%.zip" "*.dll" && popd & exit 0
+  - sh: pushd builddir; tar -cvJf logic-dshot-${REL_PLATFORM}-${GIT_REV}.tar.xz $(ls *.so *.dylib 2>/dev/null); popd
 
 after_build:
   - ps: ls builddir
